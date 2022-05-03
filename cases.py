@@ -11,6 +11,7 @@ from system import *
 
 #cases from Doron's paper
 def create(model):
+    print("cases")
     plant = process("plant",["g1","g2"],[],[],"g1",update_states=["g2"])
     environment = process("environment",["e1","e2","e3","e4","e5"],[],[],"e1")
     

@@ -47,7 +47,8 @@ from system import *
 
 
 #combination lock automaton abaa
-def create(model):        
+def create(model):
+    print("combination_lock2")
     plant = process("plant",["g0"],[],[],"g0")
     environment = process("environment",["s0","s1","s2","s3","s4","s5"],[],[],"s0")
     

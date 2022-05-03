@@ -10,7 +10,8 @@ Created on Wed Apr  3 15:50:49 2019
 from system import *
 
 # choose the most successes path
-def create(model):        
+def create(model):
+    print("choice3")
     plant = process("plant",["g1","g2","g3"],[],[],"g1",update_states = ["g1"])
     environment = process("environment",["e1","e2","e3","e4","e5","e6"],[],[],"e1")
     

@@ -10,7 +10,8 @@ Created on Wed Apr  3 15:25:36 2019
 from system import *
 
 #mixup of the schedule and permitted (cycle_abc) from the paper
-def create(model):        
+def create(model):
+    print("combined_scheduale_cyrcle")
     plant = process("plant",["g1","g2"],[],[],"g1")
     environment = process("environment",["e1","e2","e3","e4"],[],[],"e1")
     

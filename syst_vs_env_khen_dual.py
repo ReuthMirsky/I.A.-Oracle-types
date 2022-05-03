@@ -57,6 +57,7 @@ def default_lookahead(history):
     return 0
 
 
+
 def random_lookahead(history, average=3, variation=2):
     return random.randint(average - 2, average + 2)
 

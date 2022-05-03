@@ -103,8 +103,8 @@ for figure_number in range(1, 2):
                             pve.reinitialize()  # return system and environment to initial states
 
                             # Now we generate a training sequence.
-                            pve.generate_training_execution(length,lookahead = lookahead,epsilon = epsilon,compare_loss = False, is_plant=True)
-                            pve.generate_training_execution(length, lookahead=lookahead, epsilon=epsilon, compare_loss=False, is_plant=False)
+                            pve.generate_training_execution(length,lookahead = lookahead,epsilon = epsilon,compare_loss = False)#, is_plant=True)
+                            pve.generate_training_execution(length, lookahead=lookahead, epsilon=epsilon, compare_loss=False)#, is_plant=False)
 
             failures = []
             failures2 = []
@@ -113,16 +113,16 @@ for figure_number in range(1, 2):
 
             for control in range(C):
                 pve.reinitialize()
-                execution = pve.generate_controlled_execution(L_C_short,print_probs = False,is_plant=True)
-                execution2 = pve.generate_controlled_execution(L_C_short,print_probs = False,is_plant=False)
+                execution = pve.generate_controlled_execution(L_C_short)#,print_probs = False)#,is_plant=True)
+                execution2 = pve.generate_controlled_execution(L_C_short)#,print_probs = False)#,is_plant=False)
 
                 failures_short.append(count_failures(execution))
                 failures_short2.append(count_failures(execution2))
 
             for control in range(C):
                 pve.reinitialize()
-                execution = pve.generate_controlled_execution(L_C,print_probs = False,is_plant=True)
-                execution2 = pve.generate_controlled_execution(L_C,print_probs = False,is_plant=False)
+                execution = pve.generate_controlled_execution(L_C)#,print_probs = False)#,is_plant=True)
+                execution2 = pve.generate_controlled_execution(L_C)#,print_probs = False)#,is_plant=False)
 
                 failures.append(count_failures(execution))
                 failures2.append(count_failures(execution2))

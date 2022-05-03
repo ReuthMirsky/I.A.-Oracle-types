@@ -73,7 +73,8 @@ def create(model):
     dict = {
         "g0s0":"a",
         "g1s1":"b",
-        "g2s2":"a"
+        "g2s2":"a",
+        #"g3s3":"c"
     }
 
     pve = plant_environment("syst",plant,environment,model = model,oracle=dict)
@@ -85,4 +86,5 @@ def create(model):
     pve.create_RNN()
     pve.reinitialize()
     return pve
+
 

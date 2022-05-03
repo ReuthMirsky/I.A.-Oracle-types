@@ -12,7 +12,7 @@ runs = 1 # will be >1 only for combined examples
 
 # from cycle_abc import *
 # from cycle_abb import *
-from schedule import *
+from cycle_abc_oracle import *
 # from cases import *
 # from unlucky import *
 # from strategy import *
@@ -68,17 +68,17 @@ results_short = []
 
 best = L_C
 best_short = L_C_short
-
+print("***")
 worst = 0
 worst_short = 0
 
 print("Computation for",number_of_epochs,"epochs and training executions of length",training_execution_length)
 
-for tests in range(10):
+for tests in range(2):
     
     pve = create(model) # this generates the system and environment
     
-    
+
     for r in range(runs):
         
     
@@ -95,7 +95,7 @@ for tests in range(10):
                     pve.reinitialize() #return system and environment to initial states
                     
                     # Now we generate a training sequence.
-                    pve.generate_training_execution(length,lookahead = lookahead,epsilon = epsilon,compare_loss = False)
+                    pve.generate_training_execution(length,lookahead = lookahead,epsilon = epsilon)#compare_loss = False)
             
     
             
@@ -109,12 +109,12 @@ for tests in range(10):
     
     for control in range(C):
         pve.reinitialize()
-        execution = pve.generate_controlled_execution(L_C_short,print_probs = False)
+        execution = pve.generate_controlled_execution(L_C_short)#,print_probs = False)
         failures_short.append(count_failures(execution))
         
     for control in range(C):
         pve.reinitialize()
-        execution = pve.generate_controlled_execution(L_C,print_probs = False)
+        execution = pve.generate_controlled_execution(L_C)#,print_probs = False)
         failures.append(count_failures(execution))
         
     percentage = 0
@@ -172,6 +172,7 @@ def run(pve, steps = 50, print_first=False, print_probs=False):
 def test(number_of_tests, number_of_runs, size, print_probs=False, random_exploration=False, new_loss=False,
          lookahead=1, epsilon=0, compare_loss=False):
     results = []
+
     T = number_of_runs
     L = size
 

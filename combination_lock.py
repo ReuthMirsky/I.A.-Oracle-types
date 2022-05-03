@@ -66,7 +66,8 @@ from system import *
 
 
 #combination lock automaton aba
-def create(model):        
+def create(model):
+    print("combination_lock")
     plant = process("plant",["g0","g1","g2","g3"],[],[],"g0",update_states = ["g3"])
     environment = process("environment",["s0","s1","s2","s3","s4"],[],[],"s0")
 

@@ -12,7 +12,8 @@ Created on Wed Apr  3 15:50:49 2019
 from system import *
 
 # choose the least failures path, only on the first step
-def create(model):        
+def create(model):
+    print("choice and good failure")
     plant = process("plant",["g1","g2","g3","g4"],[],[],"g1",update_states = ["g1","g2","g4"])
     environment = process("environment",["e1","e2"],[],[],"e1")
     

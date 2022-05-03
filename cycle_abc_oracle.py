@@ -10,12 +10,15 @@ Created on Wed Apr  3 15:25:36 2019
 from system import *
 
 #first easy example
-def create(model):        
+def create(model):
+    print("cycle_abc_oracle")
     plant = process("plant",["p0"],[],[],"p0")
     environment = process("environment",["e0","e1","e2"],[],[],"e0")
 
     dict = {
-        "p0e0":"a"
+        "p0e0":"a",
+        "p0e1": "b",
+        "p0e2": "c"
     }
     pve = plant_environment("syst",plant,environment,model = model, oracle=dict)
     

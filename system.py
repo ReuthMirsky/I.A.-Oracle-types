@@ -18,6 +18,7 @@ class Transition:
         self.end = end
 
 
+
 class process:
     # finite automaton where transitions can be shared with other processes.
     def __init__(self, name, states=[], internal=[], shared=[], initial_state=None, update_states=[]):
@@ -58,7 +59,7 @@ class process:
             self.internal.append(Transition(name, start, end))  # add a new transition from state start to state end.
         else:
             self.shared.append(Transition(name, start, end))
-        
+
     def trigger_transition(self, tr_name):
         try:  # move the process according to the transition tr_name, printing an error if not possible.
             self.current_state = next(tr.end for tr in self.internal if tr_name == tr.name and tr.start == self.current_state)
@@ -164,6 +165,7 @@ class plant_environment(System):
                                          ([output[i] for i,tr in enumerate(self.plant.all_transitions) if tr in available]))[0]
         else:
             next_transition = available[0]
+            available = self.plant.available_transitions()
         return next_transition
 
     def check_transition(self, plant_transition):
@@ -182,7 +184,27 @@ class plant_environment(System):
         plant_action = random.choice([tr for tr in self.plant.internal + self.plant.shared if tr.start == self.plant.current_state]).name
         environment_action = random.choice([tr for tr in self.environment.internal + self.environment.shared if tr.start == self.environment.current_state]).name
         return [plant_action,environment_action]
+    #################################################
+    def check_transition1(self, transition):
+        available1 = self.environment.available_transitions()
+        available2 = self.plant.available_transitions()
+        if transition in available1 and transition in available2 :
+            return [transition, transition]
+        elif transition in available2:
+            return ["fail("+transition+")", random.choice(available1)]
+        else:
+            return ["fail(" + random.choice(available2) + ")", transition]
 
+    def trigger_transition1(self,transition):
+        if transition[0][:4] != "fail":
+            self.plant.trigger_transition(transition[0])
+        self.environment.trigger_transition(transition[1])
+
+    def random_transition1(self):
+        plant_action = random.choice([tr for tr in self.plant.internal + self.plant.shared if tr.start == self.plant.current_state]).name
+        environment_action = random.choice([tr for tr in self.environment.internal + self.environment.shared if tr.start == self.environment.current_state]).name
+        return [plant_action,environment_action]
+    #################################################
     def generate_random_execution(self, steps):
         execution = []
         for s in range(steps):
@@ -192,7 +214,7 @@ class plant_environment(System):
             execution.append(tr)
         return execution
 
-    def generate_controlled_execution(self, steps):
+    def generate_controlled_execution(self, steps,use_oracle=False):
         execution = []
         dy.renew_cg()
         state = self.network.initial_state()
@@ -202,20 +224,130 @@ class plant_environment(System):
             input_vector = dy.inputVector(network_input)
             state = state.add_input(input_vector)
             output = dy.softmax(self.R * state.output() + self.bias).value()
-
-            oracle_state = self.plant.current_state + self.environment.current_state
-            if oracle_state in self.oracle:
-                next_plant_action = self.oracle[oracle_state]
+            if(use_oracle):
+                oracle_state = self.plant.current_state + self.environment.current_state
+                if oracle_state in self.oracle:
+                    if (len(self.oracle[oracle_state]) > 1):
+                        next_plant_action = random.choice(self.oracle[oracle_state])
+                    else:
+                        next_plant_action = self.oracle[oracle_state]
+                else:
+                    next_plant_action = self.RNN_output(output)
             else:
                 next_plant_action = self.RNN_output(output)
-
-            tr = self.check_transition(next_plant_action)
+            tr = self.check_transition1(next_plant_action)
             self.trigger_transition(tr)
             execution.append(tr)
             last_transition = tr[0]
         return execution
 
-    def generate_training_execution(self, steps=50, lookahead=1, epsilon=0):
+    def generate_training_execution(self, steps=50, lookahead=1,compare_loss = False, epsilon=0,use_oracle=False):
+        rollout = [None] * (lookahead + 1)
+        rollout_error = [None] * (lookahead + 1)
+
+        def rollout_update(rollout, new_state):
+            return rollout[1:]+[new_state]
+
+        def rollout_error_update(rollout_errors, error):
+            return rollout_errors[1:]+[error]
+
+        def get_rollouts(tr, rollout, rollout_error):
+            plant_tr = tr[0]
+            if plant_tr[:4] == "fail":
+                plant_tr = plant_tr[5]
+                rollout_error = rollout_error_update(rollout_error, True)
+            else:
+                rollout_error = rollout_error_update(rollout_error, False)
+            # store information about the output to compute the loss
+
+            rollout = rollout_update(rollout, (output, self.plant.available_transitions(), plant_tr))
+            i_train = next(i for i in range(len(rollout)) if rollout[i] is not None)
+            return rollout, rollout_error, i_train
+
+        def get_loss(p: process, rollout, rollout_error, i_train, loss):
+            if rollout[i_train] is not None:
+                nb_failures = rollout_error.count(True)  # count successes and failures in lookahead window
+                nb_successes = 1 + lookahead - nb_failures
+                for i in range(len(self.plant.all_transitions)):
+                    if self.plant.all_transitions[i] in rollout[i_train][1]:
+                        if self.plant.all_transitions[i] == rollout[i_train][2]:  # chosen action
+                            loss.append((nb_successes/(lookahead+1))*dy.pickneglogsoftmax(rollout[i_train][0],i))
+                        else:  # not chosen action
+                            loss.append((nb_failures/(lookahead+1))*dy.pickneglogsoftmax(rollout[i_train][0],i))
+            return loss
+
+        execution = []
+        last_transition = None
+        dy.renew_cg()
+        state = self.network.initial_state()
+        loss = [dy.scalarInput(0)]
+        for step in range(steps):
+            network_input = self.RNN_input(last_transition)
+            input_vector = dy.inputVector(network_input)
+            state = state.add_input(input_vector)
+            output = dy.softmax(self.R*state.output() + self.bias)
+            output_value = output.value()
+            if(use_oracle):
+                oracle_state = self.plant.current_state + self.environment.current_state
+                if oracle_state in self.oracle:
+                    #next_plant_action = self.oracle[oracle_state]
+
+                    if (len(self.oracle[oracle_state]) > 1):
+                        next_plant_action = random.choice(self.oracle[oracle_state])
+                    else:
+                        next_plant_action = self.oracle[oracle_state]
+
+                elif random.random() < epsilon:
+                        next_plant_action = self.random_transition()[0]
+                else:
+                    next_plant_action = self.RNN_output(output_value)
+            else:
+                next_plant_action = self.RNN_output(output_value)
+            tr = self.check_transition1(next_plant_action)
+            # update the information for the loss with lookahead: remember the successes and failures
+            rollout, rollout_error, i_train = get_rollouts(tr, rollout, rollout_error)
+            loss = get_loss(self.plant, rollout, rollout_error, i_train, loss)
+
+            loss_compute = dy.esum(loss)
+            loss_compute.value()
+            loss_compute.backward()
+            self.trainer.update()
+            loss = [dy.scalarInput(0)]
+            self.trigger_transition1(tr)
+            execution.append(tr)
+            last_transition = tr[0]
+        return execution,loss
+
+    ########################################################################################################################
+
+    def generate_controlled_execution1(self, steps,use_oracle=False):
+        execution = []
+        dy.renew_cg()
+        state = self.network.initial_state()
+        last_transition = None
+        for step in range(steps):
+            network_input = self.RNN_input(last_transition)
+            input_vector = dy.inputVector(network_input)
+            state = state.add_input(input_vector)
+            output = dy.softmax(self.R * state.output() + self.bias).value()
+            if(use_oracle):
+                oracle_state = self.plant.current_state + self.environment.current_state
+                if oracle_state in self.oracle:
+                    if (len(self.oracle[oracle_state]) > 1):
+                        next_action = random.choice(self.oracle[oracle_state])
+                    else:
+                        next_action = self.oracle[oracle_state]
+                else:
+                    next_action = self.RNN_output(output)
+            else:
+                next_action = self.RNN_output(output)
+            tr = self.check_transition1(next_action)
+            self.trigger_transition1(tr)
+            execution.append(tr)
+            last_transition = tr[0]
+        return execution
+
+    def generate_training_execution1(self, steps=50, lookahead=1,compare_loss = False, epsilon=0,use_oracle=False):
         rollout = [None] * (lookahead + 1)
         rollout_error = [None] * (lookahead + 1)
 
@@ -260,16 +392,23 @@ class plant_environment(System):
             state = state.add_input(input_vector)
             output = dy.softmax(self.R*state.output() + self.bias)
             output_value = output.value()
+            if(use_oracle):
+                oracle_state = self.plant.current_state + self.environment.current_state
+                if oracle_state in self.oracle:
+                    #next_plant_action = self.oracle[oracle_state]
 
-            oracle_state = self.plant.current_state + self.environment.current_state
-            if oracle_state in self.oracle:
-                next_plant_action = self.oracle[oracle_state]
+                    if (len(self.oracle[oracle_state]) > 1):
+                        next_plant_action = random.choice(self.oracle[oracle_state])
+                    else:
+                        next_plant_action = self.oracle[oracle_state]
 
-            elif random.random() < epsilon:
-                next_plant_action = self.random_transition()[0]
+                elif random.random() < epsilon:
+                        next_plant_action = self.random_transition()[0]
+                else:
+                    next_plant_action = self.RNN_output(output_value)
             else:
                 next_plant_action = self.RNN_output(output_value)
-            tr = self.check_transition(next_plant_action)
+            tr = self.check_transition1(next_plant_action)
             # update the information for the loss with lookahead: remember the successes and failures
             rollout, rollout_error, i_train = get_rollouts(tr, rollout, rollout_error)
             loss = get_loss(self.plant, rollout, rollout_error, i_train, loss)
@@ -279,7 +418,128 @@ class plant_environment(System):
             loss_compute.backward()
             self.trainer.update()
             loss = [dy.scalarInput(0)]
-            self.trigger_transition(tr)
+            self.trigger_transition1(tr)
             execution.append(tr)
             last_transition = tr[0]
-        return execution
+        return execution,loss,rollout_error.count(True)
+    """
+    def generate_training_execution2(self, steps=50, lookahead=1,compare_loss = False, epsilon=0,use_oracle=False,check_without_oracle=False):
+        rollout=rollout_with_ocl= [None] * (lookahead + 1)
+        rollout_error=rollout_error_with_ocl= [None] * (lookahead + 1)
+
+        def rollout_update(rollout, new_state):
+            return rollout[1:]+[new_state]
+
+        def rollout_error_update(rollout_errors, error):
+            return rollout_errors[1:]+[error]
+
+        def get_rollouts(tr, rollout, rollout_error):
+            plant_tr = tr[0]
+            if plant_tr[:4] == "fail":
+                plant_tr = plant_tr[5]
+                rollout_error = rollout_error_update(rollout_error, True)
+            else:
+                rollout_error = rollout_error_update(rollout_error, False)
+            # store information about the output to compute the loss
+            rollout = rollout_update(rollout, (output, self.plant.available_transitions(), plant_tr))
+            i_train = next(i for i in range(len(rollout)) if rollout[i] is not None)
+            return rollout, rollout_error, i_train
+
+        def get_loss(p: process, rollout, rollout_error, i_train, loss):
+            if rollout[i_train] is not None:
+                nb_failures = rollout_error.count(True)  # count successes and failures in lookahead window
+                nb_successes = 1 + lookahead - nb_failures
+                for i in range(len(self.plant.all_transitions)):
+                    if self.plant.all_transitions[i] in rollout[i_train][1]:
+                        if self.plant.all_transitions[i] == rollout[i_train][2]:  # chosen action
+                            loss.append((nb_successes/(lookahead+1))*dy.pickneglogsoftmax(rollout[i_train][0],i))
+                        else:  # not chosen action
+                            loss.append((nb_failures/(lookahead+1))*dy.pickneglogsoftmax(rollout[i_train][0],i))
+            return loss
+
+
+        execution= []
+        last_transition= None
+        execution_with_ocl = []
+        last_transition_with_ocl = None
+        dy.renew_cg()
+        state =state_with_ocl= self.network.initial_state()
+        loss=loss_with_ocl = [dy.scalarInput(0)]
+
+        for step in range(steps):
+
+            for l in range(1, lookahead + 1):
+                network_input = self.RNN_input(last_transition)
+                input_vector = dy.inputVector(network_input)
+                state = state.add_input(input_vector)
+                output = dy.softmax(self.R * state.output() + self.bias)
+                output_value = output.value()
+                if (use_oracle):
+                    if ( l == 1):
+                        next_plant_action = self.RNN_output(output_value)
+                    else:
+                        oracle_state = self.plant.current_state + self.environment.current_state
+                        if oracle_state in self.oracle:
+                            if (len(self.oracle[oracle_state]) > 1):
+                                next_plant_action = random.choice(self.oracle[oracle_state])
+                            else:
+                                next_plant_action = self.oracle[oracle_state]
+                        elif random.random() < epsilon:
+                            next_plant_action = self.random_transition()[0]
+                        else:
+                            next_plant_action = self.RNN_output(output_value)
+                else:
+                    next_plant_action = self.RNN_output(output_value)
+                tr = self.check_transition1(next_plant_action)
+                first_env=tr[1]
+                # update the information for the loss with lookahead: remember the successes and failures
+                rollout, rollout_error, i_train = get_rollouts(tr, rollout, rollout_error)
+                self.trigger_transition1(tr)
+                execution.append(tr)
+                last_transition = tr[0]
+
+            dy.renew_cg()
+            state = state_with_ocl = self.network.initial_state()
+            self.reinitialize()
+            for l in range(1, lookahead + 1):
+                network_input = self.RNN_input(last_transition_with_ocl)
+                input_vector = dy.inputVector(network_input)
+                state_with_ocl = state_with_ocl.add_input(input_vector)
+                output = dy.softmax(self.R * state_with_ocl.output() + self.bias)
+                output_value = output.value()
+                if (use_oracle):
+                    oracle_state = self.plant.current_state + self.environment.current_state
+                    if oracle_state in self.oracle:
+                        if (len(self.oracle[oracle_state]) > 1):
+                            next_plant_action = random.choice(self.oracle[oracle_state])
+                        else:
+                            next_plant_action = self.oracle[oracle_state]
+                    elif random.random() < epsilon:
+                        next_plant_action = self.random_transition()[0]
+                    else:
+                        next_plant_action = self.RNN_output(output_value)
+                else:
+                    next_plant_action = self.RNN_output(output_value)
+                tr_with_ocl = self.check_transition1(next_plant_action)
+                #if(l==1):
+                #    tr_with_ocl[1]=first_env
+                # update the information for the loss with lookahead: remember the successes and failures
+                rollout_with_ocl, rollout_error_with_ocl, i_train_with_ocl = get_rollouts(tr_with_ocl, rollout_with_ocl, rollout_error_with_ocl)
+                self.trigger_transition1(tr_with_ocl)
+                execution_with_ocl.append(tr_with_ocl)
+                last_transition_with_ocl = tr_with_ocl[0]
+            loss = get_loss(self.plant, rollout, rollout_error, i_train, loss)
+            loss_with_ocl = get_loss(self.plant, rollout_with_ocl, rollout_error_with_ocl, i_train_with_ocl, loss_with_ocl)
+            nb_failures = rollout_error.count(True)
+            nb_failures_with_ocl = rollout_error_with_ocl.count(True)
+            if(nb_failures>nb_failures_with_ocl):
+                loss=loss_with_ocl
+            loss_compute = dy.esum(loss)
+            loss_compute.value()
+            loss_compute.backward()
+            self.trainer.update()
+            loss = [dy.scalarInput(0)]
+            nb_failures = rollout_error.count(True)
+
+        return execution,loss,nb_failures
+    """

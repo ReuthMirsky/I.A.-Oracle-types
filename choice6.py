@@ -10,7 +10,8 @@ Created on Wed Apr  3 15:50:49 2019
 from system import *
 
 # choose the least failures path
-def create(model):        
+def create(model):
+    print("choice6")
     plant = process("plant",["g1"],[],[],"g1",update_states = ["g1"])
     environment = process("environment",["e1","e2","e3","e4","e5","e6"],[],[],"e1")
     

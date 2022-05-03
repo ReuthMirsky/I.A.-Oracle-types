@@ -10,7 +10,8 @@ Created on Wed Apr  3 15:50:49 2019
 from system import *
 
 # choose the least failures path (path acd and bccd)
-def create(model):        
+def create(model):
+    print("choice2")
     plant = process("plant",["g1","g2"],[],[],"g1",update_states = ["g1"])
     environment = process("environment",["e1","e2","e3","e4","e5","e6"],[],[],"e1")
     
@@ -22,6 +23,7 @@ def create(model):
     pve.add_transition("d",["plant","environment"],[["g2"],["e6"]],[["g2"],["e6"]])
 
     pve.create_RNN()
+
     pve.reinitialize()
     return pve
 

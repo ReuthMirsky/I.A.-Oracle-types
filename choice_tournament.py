@@ -22,7 +22,8 @@ plant_states = ["g1"] + ["a"+str(i+1) for i in range(count_d(cycles[0]))] + ["b"
 env_states = ["e"+str(i+1) for i in range(1 + len(cycles[0]) + len(cycles[1]))]
 
 # choose the least failures path
-def create(model):        
+def create(model):
+    print("choice_tournament")
     plant = process("plant",plant_states,[],[],"g1",update_states = ["g1"])
     environment = process("environment",env_states,[],[],"e1")
     

@@ -12,6 +12,7 @@ import itertools
 
 # choose the least failures path (connected components with path to access them)
 def create(model):
+    print("choice_scc_oracle")
     dict = {
         "g1e0":"d"
     }

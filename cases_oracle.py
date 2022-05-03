@@ -1,16 +1,8 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Wed Apr  3 15:25:36 2019
-
-@author: simsim
-"""
-
-
 from system import *
 
 #cases from Doron's paper
 def create(model):
+    print("cases oracle")
     dict = {
         "g1e1": "a",
         "g1e2": "a",
@@ -23,6 +15,7 @@ def create(model):
         "g2e4": "b",
         "g2e5": "b"
     }
+
     plant = process("plant",["g1","g2"],[],[],"g1",update_states=["g2"])
     environment = process("environment",["e1","e2","e3","e4","e5"],[],[],"e1")
     

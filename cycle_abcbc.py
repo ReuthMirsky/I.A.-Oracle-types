@@ -10,7 +10,8 @@ Created on Wed Apr  3 15:25:36 2019
 from system import *
 
 #first easy example
-def create(model):        
+def create(model):
+    print("cycle_abcbc")
     plant = process("plant",["p0"],[],[],"p0")
     environment = process("environment",["e0","e1","e2","e3","e4"],[],[],"e0")
     

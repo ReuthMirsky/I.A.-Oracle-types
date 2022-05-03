@@ -11,7 +11,8 @@ from system import *
 import itertools
 
 # choose the least failures path (connected components with path to access them)
-def create(model):        
+def create(model):
+    print("choice_scc")
     plant = process("plant",["g1","g2"],[],[],"g1",update_states = ["g1"])
     environment = process("environment",["e0",(l+str(i) for (l,i) in itertools.product("abcd",range(1,7)))],[],[],"e0")
     
