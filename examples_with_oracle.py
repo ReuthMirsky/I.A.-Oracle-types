@@ -1,8 +1,8 @@
 from system import *
 import itertools
 
-
-def create_fig1_1_cases_oracle(model):
+def create_fig_cases_teacher_oracle(model):
+#def create_fig1_1_cases_oracle(model):
     dict = {
         "g1e1": "a",
         "g1e2": "a",
@@ -27,8 +27,8 @@ def create_fig1_1_cases_oracle(model):
     pve.create_RNN()
     pve.reinitialize()
     return pve
-
-def create_fig1_2_strategy_oracle(model):
+def create_fig_strategy_teacher_oracle(model):
+#def create_fig1_2_strategy_oracle(model):
     dict = {
         "g2e4": "b",
         "g2e5": "c"
@@ -49,8 +49,8 @@ def create_fig1_2_strategy_oracle(model):
     pve.reinitialize()
     return pve
 
-
-def create_fig1_3_combination_lock_oracle(model):
+def create_fig_combination_lock_teacher_oracle(model):
+#def create_fig1_3_combination_lock_oracle(model):
     plant = process("plant",["g0","g1","g2","g3"],[],[],"g0",update_states = ["g3"])
     environment = process("environment",["s0","s1","s2","s3","s4"],[],[],"s0")
 
@@ -70,8 +70,8 @@ def create_fig1_3_combination_lock_oracle(model):
     pve.create_RNN()
     pve.reinitialize()
     return pve
-
-def create_fig2_1_cases_oracle(model):
+def create_fig_cases_expert_oracle(model):
+#def create_fig2_1_cases_oracle(model):
     dict = {
         "g1e1": ["b", "c"],
         "g1e2": "a",
@@ -94,7 +94,8 @@ def create_fig2_1_cases_oracle(model):
     pve.create_RNN()
     pve.reinitialize()
     return pve
-def create_fig2_2_strategy_oracle(model):
+def create_fig_strategy_expert_oracle(model):
+#def create_fig2_2_strategy_oracle(model):
     dict = {
         "g1e1": ["b", "c"],  # **** from g1 can do only a, from e1 can do b or c
         "g1e2": "a",  # agree with plant,the only option
@@ -121,7 +122,8 @@ def create_fig2_2_strategy_oracle(model):
     pve.reinitialize()
     return pve
 #combination lock automaton aba
-def create_fig2_3_combination_lock_oracle(model):
+def create_fig_combination_lock_expert_oracle(model):
+#def create_fig2_3_combination_lock_oracle(model):
     plant = process("plant",["g0","g1","g2","g3"],[],[],"g0",update_states = ["g3"])
     environment = process("environment",["s0","s1","s2","s3","s4"],[],[],"s0")
 

@@ -1,4 +1,4 @@
-from strategy_oracle import *
+from strategy_teacher_oracle import *
     #import random
     #import dynet as dy
     #import numpy as np

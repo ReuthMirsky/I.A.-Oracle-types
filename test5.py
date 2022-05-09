@@ -21,33 +21,51 @@ def count_failures(execution):
 def createByNum(num_model):
     model = "any_available"
     if (num_model == 0):
-        pve = create_fig1_2_strategy_oracle(model)  # this generates the system and environment
+        pve = create_fig_cases_teacher_oracle(model)  # this generates the system and environment
     if (num_model == 1):
-        pve = create_fig2_1_cases_oracle(model)  # this generates the system and environment
+        pve = create_fig_strategy_teacher_oracle(model)  # this generates the system and environment
     if (num_model == 2):
-        pve = create_fig2_2_strategy_oracle(model)  # this generates the system and environment
+        pve = create_fig_combination_lock_teacher_oracle(model)  # this generates the system and environment
     if (num_model == 3):
-        pve = create_fig2_3_combination_lock_oracle(model)  # this generates the system and environment
+        pve = create_fig_cases_expert_oracle(model)  # this generates the system and environment
     if (num_model == 4):
-        pve = create_fig1_4_schedule_oracle(model)
+        pve = create_fig_strategy_expert_oracle(model)  # this generates the system and environment
     if (num_model == 5):
-        pve = create_fig1_5_circle_abc(model)
-    if (num_model == 6):
-        pve = create_fig1_6_choise_scc_oracle(model)
+        pve = create_fig_combination_lock_expert_oracle(model)  # this generates the system and environment
+    #if (num_model == 6):
+    #    pve = create_fig1_4_schedule_oracle(model)
+    #if (num_model == 7):
+    #    pve = create_fig1_5_circle_abc(model)
+    #if (num_model == 8):
+    #    pve = create_fig1_6_choise_scc_oracle(model)
     return pve
 
+def print_use_case_name(num_model):
+    if (num_model == 0 or num_model == 3):
+        print("CASES ")
+    if (num_model == 1 or num_model == 4):
+        print("STRATEGY")
+    if (num_model == 2 or num_model == 5):
+        print("COMBINATION LOCK")
 
 def print_model_name(num_model):
+    if (num_model == 0):
+        print("CASES teacher oracle")
     if (num_model == 1):
-        print("CASES")
+        print("STRATEGY teacher oracle")
     if (num_model == 2):
-        print("STRATEGY")
-    if (num_model == 3):
-        print("COMBINATION LOCK")
+        print("COMBINATION LOCK teacher oracle")
+    if(num_model == 3):
+        print("CASES expert oracle")
     if (num_model == 4):
-        print("SCHEDULE")
+        print("STRATEGY expert oracle")
     if (num_model == 5):
-        print("PERMITTED")  # abc cyrcle
+        print("COMBINATION LOCK expert oracle")
+    #if (num_model == 6):
+    #    print("SCHEDULE")
+    #if (num_model == 7):
+    #    print("PERMITTE
+    #    D")  # abc cyrcle
 
 
 def run1(use_oracle_training=False, use_oracle_testing=False,num_model=0):
@@ -88,7 +106,7 @@ def run1(use_oracle_training=False, use_oracle_testing=False,num_model=0):
     best_short = L_C_short
     worst = 0
     worst_short = 0
-    print_model_name(num_model)
+    print_use_case_name(num_model)
     print("Computation for", number_of_epochs, "epochs and training executions of length", training_execution_length)
 
     for tests in range(10):
@@ -242,7 +260,7 @@ def run1(use_oracle_training=False, use_oracle_testing=False,num_model=0):
         percentage /= C
     print("(random)", percentage * 100, "%")
     """
-
+#run2 runs the use_case with oracle only in training and with oracle in training+testing
 
 def run2(num_model=0):
     # to use a particular example, uncomment its line and comment all the others
@@ -304,7 +322,6 @@ def run2(num_model=0):
                             #pve2.reinitialize()
                             # Now we generate a training sequence.
                             execution1,loss1,nb_failures1=pve.generate_training_execution1(length, lookahead=lookahead, epsilon=epsilon,use_oracle=True)
-                            #execution2,loss2, nb_failures2 = pve.generate_training_execution2(length,lookahead=lookahead, epsilon=epsilon,use_oracle=True,check_without_oracle=False)
 
                             #ex2=pve2.generate_training_execution1(length, lookahead=lookahead, epsilon=epsilon,use_oracle=True)
 
@@ -417,8 +434,10 @@ def run_model(num):
 
 
 #run2(0)
-print("NEW ORACLE")
-run2(2)
+#print("NEW ORACLE")
+run1(False,False,0) #run use_case without oracle
+run2(0)
+run2(3)
 #run1(False,False,3)
 #run2(3)
 #run1(False,False,1)

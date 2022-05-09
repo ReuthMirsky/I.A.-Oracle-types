@@ -60,13 +60,19 @@ from system import *
 
 
 #combination lock automaton aba
-def create(model):
-    print("combination_lock")
+def create(model):        
     plant = process("plant",["g0","g1","g2","g3"],[],[],"g0",update_states = ["g3"])
     environment = process("environment",["s0","s1","s2","s3","s4"],[],[],"s0")
 
-    pve = plant_environment("syst",plant,environment,model = model)
-    
+    dict = {
+        "g0s0":"a",
+        "g1s1":"b",
+        "g2s2":"a",
+        #"g3s3":"c"
+    }
+
+    pve = plant_environment("syst",plant,environment,model = model,oracle=dict)
+
     pve.add_transition("a",["plant","environment"],[["g0","g1","g2"],["s0","s1","s2","s4"]],[["g1","g2","g3"],["s1","s4","s3","s4"]])
     pve.add_transition("b",["plant","environment"],[["g0","g1","g2"],["s0","s1","s2","s4"]],[["g1","g2","g3"],["s4","s2","s4","s4"]])
     pve.add_transition("c",["plant","environment"],[["g3"],["s3"]],[["g3"],["s3"]])
@@ -74,4 +80,5 @@ def create(model):
     pve.create_RNN()
     pve.reinitialize()
     return pve
+
 
