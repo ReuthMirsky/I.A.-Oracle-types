@@ -1,6 +1,7 @@
 import random
 import dynet as dy
 import numpy as np
+import math
 
 
 def softmax(l):
@@ -32,7 +33,7 @@ class process:
         self.shared_transitions = []  # initialized as empty lists that will be filled using list_transitions.
         self.all_transitions = []  # all_transitions will be updated as the concatenation of the two previous lists.
         self.update_states = update_states  # only states on which a learning pass can be done. empty = all states.
-
+        self.pr_dict={}
     def add_state(self, name):
         self.states.append(name)
         if self.current_state is None:
@@ -85,6 +86,136 @@ class process:
                 available.append(tr.name)
         return available  # returns a list of names of transitions that can be triggered in the current state.
 
+
+    #gets a state and return a list of names of transitions that can be triggered in the current state
+    def available_trans(self,state):
+        available = []
+        for tr in self.internal + self.shared:
+            if tr.name not in available and tr.start == state:
+                available.append(tr.name)
+        return available  # returns a list of names of transitions that can be triggered in the current state.
+
+    #gets a state and action and return the probability for this action
+    def prob(self, state, trans):
+        available = self.available_trans(state)
+        if (trans in available):
+            p = 1. / len(available)
+        else:
+            p = 0
+        return p
+    def prob_byRnn(self, state, trans):
+        available = self.all_transitions
+        idx = [i for i, s in enumerate(available) if trans in s]
+        return self.pr_dict[state][idx[0]]
+
+    #gets a state, action and oracle and return the probablity for this state prob(system=p_trans|oracle=o_trans)
+    def conditional_prob(self, state, p_trans,o_trans):
+        available = self.available_trans(state)
+        if (p_trans in available and o_trans in available):
+            if (p_trans== o_trans):
+                p = 1
+            else:
+                p=0
+        elif (p_trans in available and o_trans not in available):
+            p = 1./len(available)
+        elif p_trans not in available:
+            p=0
+        return p
+
+    #gets a atate and oracle and returns IG(oracle) for the given state
+    #H(oracle=o_trans)=1/len(actions)*[sigma (p(system=t|oracle=o_trans)*log(p(system=t|oracle=o_trans))] for all action t
+    def H_with_queryO(self,state,o_trans):
+        sum=0
+        available = self.all_transitions
+        for action in available:
+            p=self.conditional_prob(state,action,o_trans)
+            if (p!=0):
+                sum+=p*math.log2(p)
+            else:
+                sum+=p
+        if (sum!=0):
+            sum=-sum
+        return (1./len(available))*sum
+
+
+    #gets a state and return a list of all IG (for all actions), for example if the actions are a,b,c so for state g1 returns list=[IG(a),IG(b),IG(c)]
+    def H_query_for_state(self, state):
+        list=[]
+        trans = self.all_transitions
+        for i in trans:
+            t=self.H_with_queryO(state,i) #H(i)
+            list.append(t)
+        return list
+
+    #returns a dictionary. Each key is a state ands its values are a list of IG for all the actions
+    def H_query_for_all_states(self):
+        list=[]
+        states = sorted(self.states)
+        d = dict.fromkeys(states,[])
+        for i in d:
+            p=self.H_query_for_state(i)
+            d[i]=p
+        return d
+
+    #gets a state and return H(not quering)=sigma(psystem=t) * log(p(system=t) for all action t
+    def H_not_query(self, state):
+        sum = 0
+        available = self.all_transitions
+        for action in available:
+            p = self.prob(state, action)
+            if (p != 0):
+                sum += p * math.log2(p)
+            else:
+                sum += p
+        if sum!=0:
+            sum=-sum
+        return sum
+    def H_not_query_byRnn(self, state):
+        sum = 0
+        available = self.all_transitions
+        for action in available:
+            p = self.prob_byRnn(state, action)
+            if (p != 0):
+                sum += p * math.log2(p)
+            else:
+                sum += p
+        if sum!=0:
+            sum=-sum
+        return sum
+    # Return a dictionary.Each key is a state and its value is a value H(not query) for the same state
+    def H_all_states_not_query(self):
+        list = []
+        states = sorted(self.states)
+        d = dict.fromkeys(states, [])
+        for i in d:
+            h = self.H_not_query(i)
+            d[i] = h
+        return d
+    def H_all_states_not_query_byRnn(self):
+        list = []
+        states = sorted(self.states)
+        d = dict.fromkeys(states, [])
+        for i in d:
+            h = self.H_not_query_byRnn(i)
+            d[i] = h
+        return d
+    def Ig_final(self):
+        H_q=self.H_query_for_all_states()
+        for key, values in H_q.items():
+            H_q[key] = sum(values)
+        h=self.H_all_states_not_query()
+        Ig=H_q.copy()
+        for key, values in H_q.items():
+            Ig[key] =h[key]-H_q[key]
+        return Ig,h
+    def Ig_final_withRnn(self):
+        H_q=self.H_query_for_all_states()
+        for key, values in H_q.items():
+            H_q[key] = sum(values)
+        h=self.H_all_states_not_query_byRnn()
+        for key, values in H_q.items():
+            H_q[key] =h[key]-H_q[key]
+        return H_q,h
 
 class System:
     def __init__(self, name, processes):  # a system is a compound of processes.
@@ -320,6 +451,7 @@ class plant_environment(System):
 
     ########################################################################################################################
 
+
     def generate_controlled_execution1(self, steps,use_oracle=False):
         execution = []
         dy.renew_cg()
@@ -422,3 +554,118 @@ class plant_environment(System):
             execution.append(tr)
             last_transition = tr[0]
         return execution,loss,rollout_error.count(True)
+
+    def generate_training_execution11(self, dict,steps=50, lookahead=1,compare_loss = False, epsilon=0,use_oracle=False):
+
+
+        rollout = [None] * (lookahead + 1)
+        rollout_error = [None] * (lookahead + 1)
+
+        def rollout_update(rollout, new_state):
+            return rollout[1:]+[new_state]
+
+        def rollout_error_update(rollout_errors, error):
+            return rollout_errors[1:]+[error]
+
+        def get_rollouts(tr, rollout, rollout_error):
+            plant_tr = tr[0]
+            if plant_tr[:4] == "fail":
+                plant_tr = plant_tr[5]
+                rollout_error = rollout_error_update(rollout_error, True)
+            else:
+                rollout_error = rollout_error_update(rollout_error, False)
+            # store information about the output to compute the loss
+            rollout = rollout_update(rollout, (output, self.plant.available_transitions(), plant_tr))
+            i_train = next(i for i in range(len(rollout)) if rollout[i] is not None)
+            return rollout, rollout_error, i_train
+
+        def get_loss(p: process, rollout, rollout_error, i_train, loss):
+            if rollout[i_train] is not None:
+                nb_failures = rollout_error.count(True)  # count successes and failures in lookahead window
+                nb_successes = 1 + lookahead - nb_failures
+                for i in range(len(self.plant.all_transitions)):
+                    if self.plant.all_transitions[i] in rollout[i_train][1]:
+                        if self.plant.all_transitions[i] == rollout[i_train][2]:  # chosen action
+                            loss.append((nb_successes/(lookahead+1))*dy.pickneglogsoftmax(rollout[i_train][0],i))
+                        else:  # not chosen action
+                            loss.append((nb_failures/(lookahead+1))*dy.pickneglogsoftmax(rollout[i_train][0],i))
+            return loss
+
+        execution = []
+        last_transition = None
+        dy.renew_cg()
+        state = self.network.initial_state()
+        loss = [dy.scalarInput(0)]
+        for step in range(steps):
+            network_input = self.RNN_input(last_transition)
+            input_vector = dy.inputVector(network_input)
+            state = state.add_input(input_vector)
+            output = dy.softmax(self.R*state.output() + self.bias)
+            output_value = output.value()
+            combined_state=self.plant.current_state + self.environment.current_state
+            #if  combined_state not in dict.keys():  # if key is present in the list, just append the value
+            dict[self.plant.current_state]=(output_value)
+            #else:
+            #    dict[combined_state] = []  # else create a empty list as value for the key
+            #    dict[combined_state].append(output_value)  # now append the value for that key
+
+            if(use_oracle):
+                oracle_state = self.plant.current_state + self.environment.current_state
+                if oracle_state in self.oracle:
+                    #next_plant_action = self.oracle[oracle_state]
+
+                    if (len(self.oracle[oracle_state]) > 1):
+                        next_plant_action = random.choice(self.oracle[oracle_state])
+                    else:
+                        next_plant_action = self.oracle[oracle_state]
+
+                elif random.random() < epsilon:
+                        next_plant_action = self.random_transition()[0]
+                else:
+                    next_plant_action = self.RNN_output(output_value)
+            else:
+                next_plant_action = self.RNN_output(output_value)
+            tr = self.check_transition1(next_plant_action)
+            # update the information for the loss with lookahead: remember the successes and failures
+            rollout, rollout_error, i_train = get_rollouts(tr, rollout, rollout_error)
+            loss = get_loss(self.plant, rollout, rollout_error, i_train, loss)
+
+            loss_compute = dy.esum(loss)
+            loss_compute.value()
+            loss_compute.backward()
+            self.trainer.update()
+            loss = [dy.scalarInput(0)]
+            self.trigger_transition1(tr)
+            execution.append(tr)
+            last_transition = tr[0]
+        return dict
+    def generate_controlled_execution_with_Ig(self, steps,use_oracle=False,Ig=False):
+            execution = []
+            dy.renew_cg()
+            state = self.network.initial_state()
+            last_transition = None
+            for step in range(steps):
+                network_input = self.RNN_input(last_transition)
+                input_vector = dy.inputVector(network_input)
+                state = state.add_input(input_vector)
+                output = dy.softmax(self.R * state.output() + self.bias).value()
+                dict=self.plant.Ig_final_withRnn()
+                if(dict):
+                    Ig=self.plant.Ig_final_withRnn()
+                if(use_oracle and Ig and dict!={} and Ig[self.plant.current_state]>0.6):
+                    oracle_state = self.plant.current_state + self.environment.current_state
+                    if oracle_state in self.oracle:
+                        if (len(self.oracle[oracle_state]) > 1):
+                            next_action = random.choice(self.oracle[oracle_state])
+                        else:
+                            next_action = self.oracle[oracle_state]
+                    else:
+                        next_action = self.RNN_output(output)
+                else:
+                    next_action = self.RNN_output(output)
+
+                tr = self.check_transition1(next_action)
+                self.trigger_transition1(tr)
+                execution.append(tr)
+                last_transition = tr[0]
+            return execution

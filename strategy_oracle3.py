@@ -5,6 +5,67 @@ from system import *
 # strategy from Doron's paper
 def create(model):
     dict = {
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         "g1e1":["b","c"], # **** from g1 can do only a, from e1 can do b or c
         "g1e2":"a", # agree with plant,the only option
         "g1e3":"a", # agree with plant,the only option
