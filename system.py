@@ -111,6 +111,7 @@ class process:
     #gets a state, action and oracle and return the probablity for this state prob(system=p_trans|oracle=o_trans)
     def conditional_prob(self, state, p_trans,o_trans):
         available = self.available_trans(state)
+
         if (p_trans in available and o_trans in available):
             if (p_trans== o_trans):
                 p = 1
@@ -122,9 +123,12 @@ class process:
             p=0
         return p
 
-    #gets a atate and oracle and returns IG(oracle) for the given state
+    ######################################### H query uniform   #########################
+
+
+    #gets a atate and oracle and returns H(oracle) for the given state
     #H(oracle=o_trans)=1/len(actions)*[sigma (p(system=t|oracle=o_trans)*log(p(system=t|oracle=o_trans))] for all action t
-    def H_with_queryO(self,state,o_trans):
+    def H_with_query_uniform(self,state,o_trans):
         sum=0
         available = self.all_transitions
         for action in available:
@@ -137,39 +141,90 @@ class process:
             sum=-sum
         return (1./len(available))*sum
 
-
-    #gets a state and return a list of all IG (for all actions), for example if the actions are a,b,c so for state g1 returns list=[IG(a),IG(b),IG(c)]
-    def H_query_for_state(self, state):
-        list=[]
+    # gets a state and return a list of all IG (for all actions), for example if the actions are a,b,c so for state g1 returns list=[H(a),H(b),H(c)]
+    def H_query_for_state_uniform(self, state):
+        list = []
         trans = self.all_transitions
         for i in trans:
-            t=self.H_with_queryO(state,i) #H(i)
+            t = self.H_with_query_uniform(state, i)  # H(i)
             list.append(t)
         return list
 
-    #returns a dictionary. Each key is a state ands its values are a list of IG for all the actions
-    def H_query_for_all_states(self):
-        list=[]
+    # returns a dictionary. Each key is a state ands its values are a list of H for all the actions
+    def H_query_for_all_states_uniform(self):
+        list = []
         states = sorted(self.states)
-        d = dict.fromkeys(states,[])
+        d = dict.fromkeys(states, [])
         for i in d:
-            p=self.H_query_for_state(i)
-            d[i]=p
+            p = self.H_query_for_state_uniform(i)
+            d[i] = p
         return d
 
+    ######################################### H query with normal rnn #########################
+    def H_query_for_all_states_normal(self):
+        list = []
+        states = sorted(self.states)
+        d = dict.fromkeys(states, [])
+        for i in d:
+            p = self.H_query_for_state_normal(i)
+            d[i] = p
+        return d
+
+    def H_query_for_state_normal(self, state):
+        list=[]
+        trans = self.all_transitions
+        for i in trans:
+            t=self.H_with_queryO_normal(state,i) #H(i)
+            list.append(t)
+        return list
+
+    def H_with_queryO_normal(self,state,o_trans):
+        p=0
+        result=0
+        available = self.all_transitions
+        actions=self.available_trans(state)
+        probs=(self.pr_dict)[state]
+        sum = 0
+        for action in actions:
+            idx = [i for i, s in enumerate(available) if action in s]
+            sum += probs[idx[0]]
+        idx = [i for i, s in enumerate(available) if o_trans in s]
+        if(o_trans in actions):
+            p = probs[idx[0]] / sum
+            for action in available:
+                cond_p=self.conditional_prob(state,action,o_trans)
+                if (cond_p!=0):
+                    result+=cond_p*math.log2(cond_p)
+        if (result!=0):
+            result=-result
+        return result*p
+
+
+
+    ########################### H not querying uniform ######################################################
+
     #gets a state and return H(not quering)=sigma(psystem=t) * log(p(system=t) for all action t
-    def H_not_query(self, state):
+    def H_not_query_uniform(self, state):
         sum = 0
         available = self.all_transitions
         for action in available:
             p = self.prob(state, action)
             if (p != 0):
                 sum += p * math.log2(p)
-            else:
-                sum += p
         if sum!=0:
             sum=-sum
         return sum
+
+    # Return a dictionary.Each key is a state and its value is a value H(not query) for the same state
+    def H_all_states_not_query_uniform(self):
+        list = []
+        states = sorted(self.states)
+        d = dict.fromkeys(states, [])
+        for i in d:
+            h = self.H_not_query_uniform(i)
+            d[i] = h
+        return d
+    ################################## H not querying rnn #################################
     def H_not_query_byRnn(self, state):
         sum = 0
         available = self.all_transitions
@@ -177,20 +232,10 @@ class process:
             p = self.prob_byRnn(state, action)
             if (p != 0):
                 sum += p * math.log2(p)
-            else:
-                sum += p
         if sum!=0:
             sum=-sum
         return sum
-    # Return a dictionary.Each key is a state and its value is a value H(not query) for the same state
-    def H_all_states_not_query(self):
-        list = []
-        states = sorted(self.states)
-        d = dict.fromkeys(states, [])
-        for i in d:
-            h = self.H_not_query(i)
-            d[i] = h
-        return d
+
     def H_all_states_not_query_byRnn(self):
         list = []
         states = sorted(self.states)
@@ -199,23 +244,30 @@ class process:
             h = self.H_not_query_byRnn(i)
             d[i] = h
         return d
-    def Ig_final(self):
-        H_q=self.H_query_for_all_states()
+    ##########################################################################
+    def Ig_final_not_trained(self):
+        H_q=self.H_query_for_all_states_uniform()
         for key, values in H_q.items():
             H_q[key] = sum(values)
-        h=self.H_all_states_not_query()
+        h=self.H_all_states_not_query_uniform()
         Ig=H_q.copy()
         for key, values in H_q.items():
             Ig[key] =h[key]-H_q[key]
-        return Ig,h
-    def Ig_final_withRnn(self):
-        H_q=self.H_query_for_all_states()
+        return Ig,h,H_q
+
+    def Ig_final_trained_BothwithRnn(self):
+        H_q=self.H_query_for_all_states_normal()
         for key, values in H_q.items():
             H_q[key] = sum(values)
         h=self.H_all_states_not_query_byRnn()
+        Ig = H_q.copy()
         for key, values in H_q.items():
-            H_q[key] =h[key]-H_q[key]
-        return H_q,h
+            Ig[key] =h[key]-H_q[key]
+        return Ig,h,H_q
+
+
+
+
 
 class System:
     def __init__(self, name, processes):  # a system is a compound of processes.
@@ -448,6 +500,98 @@ class plant_environment(System):
             execution.append(tr)
             last_transition = tr[0]
         return execution,loss
+    def choose_type(self,Ig_type):
+        if(Ig_type==1):
+            Ig, h_not_query_rnn, h_quering=self.plant.Ig_final_not_trained()
+        if (Ig_type == 2):
+            Ig, h_not_query_rnn, h_quering = self.plant.Ig_final_trained_BothwithRnn()
+        if (Ig_type == 3):
+            Ig, h_not_query_rnn, h_quering = self.Ig_final_withRnn_and_oracle()
+
+        return Ig, h_not_query_rnn, h_quering
+
+    def generate_training_execution_with_Ig(self, steps=50, lookahead=0,compare_loss = False, epsilon=0,use_oracle=False,Ig_type=4,threshold=0.3):
+        rollout = [None] * (lookahead + 1)
+        rollout_error = [None] * (lookahead + 1)
+
+        def rollout_update(rollout, new_state):
+            return rollout[1:]+[new_state]
+
+        def rollout_error_update(rollout_errors, error):
+            return rollout_errors[1:]+[error]
+
+        def get_rollouts(tr, rollout, rollout_error):
+            plant_tr = tr[0]
+            if plant_tr[:4] == "fail":
+                plant_tr = plant_tr[5]
+                rollout_error = rollout_error_update(rollout_error, True)
+            else:
+                rollout_error = rollout_error_update(rollout_error, False)
+            # store information about the output to compute the loss
+
+            rollout = rollout_update(rollout, (output, self.plant.available_transitions(), plant_tr))
+            i_train = next(i for i in range(len(rollout)) if rollout[i] is not None)
+            return rollout, rollout_error, i_train
+
+        def get_loss(p: process, rollout, rollout_error, i_train, loss):
+            if rollout[i_train] is not None:
+                nb_failures = rollout_error.count(True)  # count successes and failures in lookahead window
+                nb_successes = 1 + lookahead - nb_failures
+                for i in range(len(self.plant.all_transitions)):
+                    if self.plant.all_transitions[i] in rollout[i_train][1]:
+                        if self.plant.all_transitions[i] == rollout[i_train][2]:  # chosen action
+                            loss.append((nb_successes/(lookahead+1))*dy.pickneglogsoftmax(rollout[i_train][0],i))
+                        else:  # not chosen action
+                            loss.append((nb_failures/(lookahead+1))*dy.pickneglogsoftmax(rollout[i_train][0],i))
+            return loss
+
+        Ig, h_not_query_rnn, h_quering=self.choose_type(Ig_type)
+        #Ig, h_not_query_rnn,h_quering = self.Ig_final_withRnn_with_oracle()
+        execution = []
+        last_transition = None
+        dy.renew_cg()
+        state = self.network.initial_state()
+        loss = [dy.scalarInput(0)]
+        for step in range(steps):
+            network_input = self.RNN_input(last_transition)
+            input_vector = dy.inputVector(network_input)
+            state = state.add_input(input_vector)
+            output = dy.softmax(self.R*state.output() + self.bias)
+            output_value = output.value()
+            if (Ig[self.plant.current_state] > threshold):
+                use_oracle = True
+            else:
+                use_oracle = False
+            if(use_oracle):
+                oracle_state = self.plant.current_state + self.environment.current_state
+                if oracle_state in self.oracle:
+                    #next_plant_action = self.oracle[oracle_state]
+
+                    if (len(self.oracle[oracle_state]) > 1):
+                        next_plant_action = random.choice(self.oracle[oracle_state])
+                    else:
+                        next_plant_action = self.oracle[oracle_state]
+
+                elif random.random() < epsilon:
+                        next_plant_action = self.random_transition()[0]
+                else:
+                    next_plant_action = self.RNN_output(output_value)
+            else:
+                next_plant_action = self.RNN_output(output_value)
+            tr = self.check_transition1(next_plant_action)
+            # update the information for the loss with lookahead: remember the successes and failures
+            rollout, rollout_error, i_train = get_rollouts(tr, rollout, rollout_error)
+            loss = get_loss(self.plant, rollout, rollout_error, i_train, loss)
+
+            loss_compute = dy.esum(loss)
+            loss_compute.value()
+            loss_compute.backward()
+            self.trainer.update()
+            loss = [dy.scalarInput(0)]
+            self.trigger_transition1(tr)
+            execution.append(tr)
+            last_transition = tr[0]
+        return execution,loss
 
     ########################################################################################################################
 
@@ -457,11 +601,17 @@ class plant_environment(System):
         dy.renew_cg()
         state = self.network.initial_state()
         last_transition = None
+        Ig, h_not_query_rnn,h_quering=self.Ig_final_withRnn_with_oracle()
         for step in range(steps):
             network_input = self.RNN_input(last_transition)
             input_vector = dy.inputVector(network_input)
             state = state.add_input(input_vector)
             output = dy.softmax(self.R * state.output() + self.bias).value()
+            x=Ig[self.plant.current_state]
+            if(Ig[self.plant.current_state] >0):
+                use_oracle=True
+            else:
+                use_oracle=False
             if(use_oracle):
                 oracle_state = self.plant.current_state + self.environment.current_state
                 if oracle_state in self.oracle:
@@ -479,7 +629,88 @@ class plant_environment(System):
             last_transition = tr[0]
         return execution
 
-    def generate_training_execution1(self, steps=50, lookahead=1,compare_loss = False, epsilon=0,use_oracle=False):
+    def generate_training_execution1(self,dict, steps=50, lookahead=0,compare_loss = False, epsilon=0,use_oracle=False):
+        rollout = [None] * (lookahead + 1)
+        rollout_error = [None] * (lookahead + 1)
+
+        def rollout_update(rollout, new_state):
+            return rollout[1:]+[new_state]
+
+        def rollout_error_update(rollout_errors, error):
+            return rollout_errors[1:]+[error]
+
+        def get_rollouts(tr, rollout, rollout_error):
+            plant_tr = tr[0]
+            if plant_tr[:4] == "fail":
+                plant_tr = plant_tr[5]
+                rollout_error = rollout_error_update(rollout_error, True)
+            else:
+
+                rollout_error = rollout_error_update(rollout_error, False)
+            # store information about the output to compute the loss
+            rollout = rollout_update(rollout, (output, self.plant.available_transitions(), plant_tr))
+            i_train = next(i for i in range(len(rollout)) if rollout[i] is not None)
+            return rollout, rollout_error, i_train
+
+        def get_loss(p: process, rollout, rollout_error, i_train, loss):
+            if rollout[i_train] is not None:
+                nb_failures = rollout_error.count(True)  # count successes and failures in lookahead window
+                nb_successes = 1 + lookahead - nb_failures
+                for i in range(len(self.plant.all_transitions)):
+                    if self.plant.all_transitions[i] in rollout[i_train][1]:
+                        if self.plant.all_transitions[i] == rollout[i_train][2]:  #if the action that was chosen is available from this state
+                            loss.append((nb_successes/(lookahead+1))*dy.pickneglogsoftmax(rollout[i_train][0],i))
+                        else:  # not chosen action
+                            loss.append((nb_failures/(lookahead+1))*dy.pickneglogsoftmax(rollout[i_train][0],i))
+            return loss
+
+        execution = []
+        last_transition = None
+        dy.renew_cg()
+        state = self.network.initial_state()
+        loss = [dy.scalarInput(0)]
+        for step in range(steps):
+            network_input = self.RNN_input(last_transition)
+            input_vector = dy.inputVector(network_input)
+            state = state.add_input(input_vector)
+            output = dy.softmax(self.R*state.output() + self.bias)
+            output_value = output.value()
+
+            if(use_oracle):
+                oracle_state = self.plant.current_state + self.environment.current_state
+                if oracle_state in self.oracle:
+                    #next_plant_action = self.oracle[oracle_state]
+
+                    if (len(self.oracle[oracle_state]) > 1):
+                        next_plant_action = random.choice(self.oracle[oracle_state])
+                    else:
+                        next_plant_action = self.oracle[oracle_state]
+
+                elif random.random() < epsilon:
+                        next_plant_action = self.random_transition()[0]
+                else:
+                    next_plant_action = self.RNN_output(output_value)
+            else:
+                next_plant_action = self.RNN_output(output_value)
+            tr = self.check_transition1(next_plant_action)
+            # update the information for the loss with lookahead: remember the successes and failures
+            rollout, rollout_error, i_train = get_rollouts(tr, rollout, rollout_error)
+            loss = get_loss(self.plant, rollout, rollout_error, i_train, loss)
+
+            loss_compute = dy.esum(loss)
+            loss_compute.value()
+            loss_compute.backward()
+            self.trainer.update()
+            loss = [dy.scalarInput(0)]
+            self.trigger_transition1(tr)
+            execution.append(tr)
+            last_transition = tr[0]
+        return dict #loss,rollout_error.count(True)
+
+    #like generate_training_execution1 but without making a dictionary
+    def generate_training_execution11(self,steps=50, lookahead=1,compare_loss = False, epsilon=0,use_oracle=False):
+
+
         rollout = [None] * (lookahead + 1)
         rollout_error = [None] * (lookahead + 1)
 
@@ -553,106 +784,27 @@ class plant_environment(System):
             self.trigger_transition1(tr)
             execution.append(tr)
             last_transition = tr[0]
-        return execution,loss,rollout_error.count(True)
-
-    def generate_training_execution11(self, dict,steps=50, lookahead=1,compare_loss = False, epsilon=0,use_oracle=False):
-
-
-        rollout = [None] * (lookahead + 1)
-        rollout_error = [None] * (lookahead + 1)
-
-        def rollout_update(rollout, new_state):
-            return rollout[1:]+[new_state]
-
-        def rollout_error_update(rollout_errors, error):
-            return rollout_errors[1:]+[error]
-
-        def get_rollouts(tr, rollout, rollout_error):
-            plant_tr = tr[0]
-            if plant_tr[:4] == "fail":
-                plant_tr = plant_tr[5]
-                rollout_error = rollout_error_update(rollout_error, True)
-            else:
-                rollout_error = rollout_error_update(rollout_error, False)
-            # store information about the output to compute the loss
-            rollout = rollout_update(rollout, (output, self.plant.available_transitions(), plant_tr))
-            i_train = next(i for i in range(len(rollout)) if rollout[i] is not None)
-            return rollout, rollout_error, i_train
-
-        def get_loss(p: process, rollout, rollout_error, i_train, loss):
-            if rollout[i_train] is not None:
-                nb_failures = rollout_error.count(True)  # count successes and failures in lookahead window
-                nb_successes = 1 + lookahead - nb_failures
-                for i in range(len(self.plant.all_transitions)):
-                    if self.plant.all_transitions[i] in rollout[i_train][1]:
-                        if self.plant.all_transitions[i] == rollout[i_train][2]:  # chosen action
-                            loss.append((nb_successes/(lookahead+1))*dy.pickneglogsoftmax(rollout[i_train][0],i))
-                        else:  # not chosen action
-                            loss.append((nb_failures/(lookahead+1))*dy.pickneglogsoftmax(rollout[i_train][0],i))
-            return loss
-
-        execution = []
-        last_transition = None
-        dy.renew_cg()
-        state = self.network.initial_state()
-        loss = [dy.scalarInput(0)]
-        for step in range(steps):
-            network_input = self.RNN_input(last_transition)
-            input_vector = dy.inputVector(network_input)
-            state = state.add_input(input_vector)
-            output = dy.softmax(self.R*state.output() + self.bias)
-            output_value = output.value()
-            combined_state=self.plant.current_state + self.environment.current_state
-            #if  combined_state not in dict.keys():  # if key is present in the list, just append the value
-            dict[self.plant.current_state]=(output_value)
-            #else:
-            #    dict[combined_state] = []  # else create a empty list as value for the key
-            #    dict[combined_state].append(output_value)  # now append the value for that key
-
-            if(use_oracle):
-                oracle_state = self.plant.current_state + self.environment.current_state
-                if oracle_state in self.oracle:
-                    #next_plant_action = self.oracle[oracle_state]
-
-                    if (len(self.oracle[oracle_state]) > 1):
-                        next_plant_action = random.choice(self.oracle[oracle_state])
-                    else:
-                        next_plant_action = self.oracle[oracle_state]
-
-                elif random.random() < epsilon:
-                        next_plant_action = self.random_transition()[0]
-                else:
-                    next_plant_action = self.RNN_output(output_value)
-            else:
-                next_plant_action = self.RNN_output(output_value)
-            tr = self.check_transition1(next_plant_action)
-            # update the information for the loss with lookahead: remember the successes and failures
-            rollout, rollout_error, i_train = get_rollouts(tr, rollout, rollout_error)
-            loss = get_loss(self.plant, rollout, rollout_error, i_train, loss)
-
-            loss_compute = dy.esum(loss)
-            loss_compute.value()
-            loss_compute.backward()
-            self.trainer.update()
-            loss = [dy.scalarInput(0)]
-            self.trigger_transition1(tr)
-            execution.append(tr)
-            last_transition = tr[0]
-        return dict
-    def generate_controlled_execution_with_Ig(self, steps,use_oracle=False,Ig=False):
+        return execution
+    def generate_controlled_execution_with_Ig(self,steps,df,tests=5,use_oracle=False,Ig_type=1,threshold=0.3):
             execution = []
             dy.renew_cg()
             state = self.network.initial_state()
             last_transition = None
+            #Ig, h_not_query_rnn, h_quering=self.choose_type(Ig_type)
+            ig=df.loc[tests]
+            Ig_test=ig[Ig_type].replace('\\','')
+            Ig_test = eval(Ig_test)
             for step in range(steps):
                 network_input = self.RNN_input(last_transition)
                 input_vector = dy.inputVector(network_input)
                 state = state.add_input(input_vector)
                 output = dy.softmax(self.R * state.output() + self.bias).value()
-                dict=self.plant.Ig_final_withRnn()
-                if(dict):
-                    Ig=self.plant.Ig_final_withRnn()
-                if(use_oracle and Ig and dict!={} and Ig[self.plant.current_state]>0.6):
+
+                if (Ig_test[self.plant.current_state] > threshold):
+                    use_oracle = True
+                else:
+                    use_oracle = False
+                if(use_oracle):
                     oracle_state = self.plant.current_state + self.environment.current_state
                     if oracle_state in self.oracle:
                         if (len(self.oracle[oracle_state]) > 1):
@@ -669,3 +821,108 @@ class plant_environment(System):
                 execution.append(tr)
                 last_transition = tr[0]
             return execution
+
+    def generate_training_for_dict(self,dict, steps):
+        execution = []
+        dy.renew_cg()
+        state = self.network.initial_state()
+        last_transition = None
+        for step in range(steps):
+            network_input = self.RNN_input(last_transition)
+            input_vector = dy.inputVector(network_input)
+            state = state.add_input(input_vector)
+            output = dy.softmax(self.R * state.output() + self.bias).value()
+            dict[self.plant.current_state]=output
+            next_action = self.RNN_output(output)
+            tr = self.check_transition1(next_action)
+            self.trigger_transition1(tr)
+            execution.append(tr)
+            last_transition = tr[0]
+        return dict
+
+    ###################################H query with oracle ############################
+    def H_query_for_all_states_with_oracle(self):
+        list = []
+        states = sorted(self.plant.states)
+        d = dict.fromkeys(states, [])
+
+        for i in d:
+            p = self.H_query_for_state_with_oracle(i)
+            d[i] = p
+        return d
+
+    # calc for each state the probabilities for each action by the oracle dictionary
+    def calc_prob_for_States_by_oracle(self,state):
+        oracle_dict = self.oracle
+        l = [v for k, v in oracle_dict.items() if k.startswith(state)]
+        state_dict = dict((x, l.count(x)) for x in set(l))
+        result = {}
+        for k, v in state_dict.items():
+            for k_i in k:
+                if ((k_i) in result):
+                    result[k_i] += (v) / len(k)
+                else:
+                    result[k_i] = (v) / len(k)
+        s = sum(result.values())
+        for key in result.keys():
+            result[key] /= s
+        return result
+
+    # H(oracle=o_trans)=1/len(actions)*[sigma (p(system=t|oracle=o_trans)*log(p(system=t|oracle=o_trans))] for all action t
+    def H_with_queryO_using_oracle_dict(self, state, o_trans):
+        sum = 0
+        prob = 0
+        state_dict = self.calc_prob_for_States_by_oracle(state) #dictionary of the  actions that are chosen by the oracle for this state
+        if o_trans in state_dict:
+            prob = state_dict[o_trans]                                                         #and its probability, for example {'b':0.8,'c':0.2}
+        actions=state_dict.keys() # actions available in the oracle dictionary for the state
+        available = self.plant.all_transitions
+        for action in available:
+            cond_p = self.plant.conditional_prob(state, action, o_trans)
+            if (cond_p != 0):
+                sum += cond_p * math.log2(cond_p)
+        if (sum != 0):
+            sum = -sum
+        return  sum*prob
+
+    # gets a state and return a list of all IG (for all actions), for example if the actions are a,b,c so for state g1 returns list=[IG(a),IG(b),IG(c)]
+    def H_query_for_state_with_oracle(self, state):
+
+        list = []
+        trans = self.plant.all_transitions
+        for i in trans:
+            t = self.H_with_queryO_using_oracle_dict(state, i)  # H(i)
+            list.append(t)
+        return list
+     ######################################################################################################
+    """
+    def Ig_final_with_oracle(self):
+        H_q=self.H_query_for_all_states_with_oracle()
+        for key, values in H_q.items():
+            H_q[key] = sum(values)
+        h=self.plant.H_all_states_not_query()
+        Ig=H_q.copy()
+        for key, values in H_q.items():
+            Ig[key] =h[key]-H_q[key]
+        return Ig,h,H_q
+    """
+    def Ig_final_withRnn_and_oracle(self):
+        H_q=self.H_query_for_all_states_with_oracle()
+        for key, values in H_q.items():
+            H_q[key] = sum(values)
+        h=self.plant.H_all_states_not_query_byRnn()
+        Ig = H_q.copy()
+        for key, values in H_q.items():
+            Ig[key] =h[key]-H_q[key]
+        return Ig,h,H_q
+    def Ig_final_unifrom_and_oracle(self):
+        H_q=self.H_query_for_all_states_with_oracle()
+        for key, values in H_q.items():
+            H_q[key] = sum(values)
+        h=self.plant.H_all_states_not_query_uniform()
+        Ig = H_q.copy()
+        for key, values in H_q.items():
+            Ig[key] =h[key]-H_q[key]
+        return Ig,h,H_q
+
+
